@@ -35,7 +35,7 @@ class MainApplication:
             self.train_ds , self.valid_ds = self.classifier.create_dataset()
 
         if args.train:
-            self.model = self.image_processor.create_model(2,3,2)
+            self.model = self.image_processor.create_model(num_classes=2,num_blocks=3,num_layers=2,drop_val=.2)
             self.train_model()
 
         if args.evaluate:
@@ -50,9 +50,8 @@ class MainApplication:
         self.model.compile(optimizer='adam',
               loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True),
               metrics=['accuracy'])
-        self.model.summary()
 
-        epochs = 10
+        epochs = 15
         history = self.model.fit(
             self.train_ds,
             validation_data=self.valid_ds,
@@ -81,6 +80,9 @@ class MainApplication:
         plt.legend(loc='upper right')
         plt.title('Training and Validation Loss')
         plt.show()
+
+        self.model.summary()
+
 
 
 if __name__ == "__main__":

@@ -12,11 +12,11 @@ class GarbageVision:
     def __init__(self):
         self.model = None
 
-    def create_model(self, num_classes : int, num_blocks : int, num_layers : int) -> tf.keras.Sequential: 
+    def create_model(self, num_classes : int, num_blocks : int, num_layers : int, drop_val : float) -> tf.keras.Sequential: 
         # create sequential model and rescale 
         model = tf.keras.Sequential()
         model.add(tf.keras.layers.Rescaling(1./255))
-
+   
         # add convolutional blocks, dense layers and output layer
         for _ in range(num_blocks):
             model.add(tf.keras.layers.Conv2D(32, 3, activation='relu'))
@@ -24,11 +24,18 @@ class GarbageVision:
 
         # flatten the output from the convolutional blocks 
         model.add(tf.keras.layers.Flatten())
-
+        
         for _ in range(num_layers):
             model.add(tf.keras.layers.Dense(128, activation='relu'))
 
-        model.add(tf.keras.layers.Dense(num_classes))
+        if drop_val is None:
+            model.add(tf.keras.layers.Dense(num_classes))
+        else:
+            for _ in range(num_blocks):
+                tf.keras.layers.Dropout(drop_val)
+
+            model.add(tf.keras.layers.Dense(num_classes))
+            tf.keras.layers.Dropout(drop_val)
 
         return model 
     
