@@ -8,32 +8,31 @@ from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.callbacks import EarlyStopping
 import argparse
 
-class ImageProcessor:
+class GarbageVision:
     def __init__(self):
         self.model = None
 
-    def main(self):
-        parser = argparse.ArgumentParser(description="Image processing script")
-        parser.add_argument('--download', action='store_true', help='Download images')
-        parser.add_argument('--train', action='store_true', help='Train the model')
-        parser.add_argument('--evaluate', action='store_true', help='Evaluate the model')
+    def create_model(self, num_classes : int, num_blocks : int, num_layers : int) -> tf.keras.Sequential: 
+        # create sequential model and rescale 
+        model = tf.keras.Sequential()
+        model.add(tf.keras.layers.Rescaling(1./255))
 
-        args = parser.parse_args()
+        # add convolutional blocks, dense layers and output layer
+        for _ in range(num_blocks):
+            model.add(tf.keras.layers.Conv2D(32, 3, activation='relu'))
+            model.add(tf.keras.layers.MaxPooling2D())
 
-        if args.download:
-            self.download_images()
+        # flatten the output from the convolutional blocks 
+        model.add(tf.keras.layers.Flatten())
 
-        if args.train:
-            self.train_model()
+        for _ in range(num_layers):
+            model.add(tf.keras.layers.Dense(128, activation='relu'))
 
-        if args.evaluate:
-            self.evaluate_model()
+        model.add(tf.keras.layers.Dense(num_classes))
 
-    def download_images(self):
-        # Placeholder function for downloading images
-        print("Downloading images...")
-
-    def train_model(self):
+        return model 
+    
+    def train_model_transfer(self):
         # Define paths
         train_dir = 'dataset/training_set'
         validation_dir = 'dataset/validation_set'
