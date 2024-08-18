@@ -7,38 +7,92 @@ from tensorflow.keras.layers import Dense, Flatten
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.callbacks import EarlyStopping
 import argparse
+import matplotlib.pyplot as plt 
+import numpy as np 
+
 
 class GarbageVision:
     def __init__(self):
         self.model = None
 
-    def create_model(self, num_classes : int, num_blocks : int, num_layers : int, drop_val : float) -> tf.keras.Sequential: 
+    def create_sequential_model(self, num_classes : int, num_blocks : int, num_layers : int, drop_val : float) -> tf.keras.Sequential: 
         # create sequential model and rescale 
-        model = tf.keras.Sequential()
-        model.add(tf.keras.layers.Rescaling(1./255))
+        self.model = tf.keras.Sequential()
+        self.model.add(tf.keras.layers.Rescaling(1./255))
    
         # add convolutional blocks, dense layers and output layer
         for _ in range(num_blocks):
-            model.add(tf.keras.layers.Conv2D(32, 3, activation='relu'))
-            model.add(tf.keras.layers.MaxPooling2D())
+            self.model.add(tf.keras.layers.Conv2D(32, 3, activation='relu'))
+            self.model.add(tf.keras.layers.MaxPooling2D())
 
         # flatten the output from the convolutional blocks 
-        model.add(tf.keras.layers.Flatten())
+        self.model.add(tf.keras.layers.Flatten())
         
         for _ in range(num_layers):
-            model.add(tf.keras.layers.Dense(128, activation='relu'))
+            self.model.add(tf.keras.layers.Dense(128, activation='relu'))
 
         if drop_val is None:
-            model.add(tf.keras.layers.Dense(num_classes))
+            self.model.add(tf.keras.layers.Dense(num_classes))
         else:
             for _ in range(num_blocks):
                 tf.keras.layers.Dropout(drop_val)
 
-            model.add(tf.keras.layers.Dense(num_classes))
+            self.model.add(tf.keras.layers.Dense(num_classes))
             tf.keras.layers.Dropout(drop_val)
 
-        return model 
+        return self.model 
+
+    def evaluate_model(self , epochs : int, history) -> int:
+
+        # logs for visualization
+        acc = history.history['accuracy']
+        val_acc = history.history['val_accuracy']
+        loss = history.history['loss']
+        val_loss = history.history['val_loss']
+
+        epochs_range = range(epochs)
+
+        plt.figure(figsize=(8, 8))
+        plt.subplot(1, 2, 1)
+        plt.plot(epochs_range, acc, label='Training Accuracy')
+        plt.plot(epochs_range, val_acc, label='Validation Accuracy')
+        plt.legend(loc='lower right')
+        plt.title('Training and Validation Accuracy')
+
+        plt.subplot(1, 2, 2)
+        plt.plot(epochs_range, loss, label='Training Loss')
+        plt.plot(epochs_range, val_loss, label='Validation Loss')
+        plt.legend(loc='upper right')
+        plt.title('Training and Validation Loss')
+        plt.show()
+
+        self.model.summary()
+
+    def predict(self, class_names) -> None:
+        predict_data_path : str = r'/Users/carlosromero/Desktop/garbage_vision/prediction_data/'
+
+        for filename in os.listdir(predict_data_path):
+            if filename.endswith(".jpg") or filename.endswith(".png"):
+                file_path = os.path.join(predict_data_path, filename)
+                img = tf.keras.utils.load_img(
+                    file_path, target_size=(180, 180)
+                )
+                
+                img_array = tf.keras.utils.img_to_array(img)
+                img_array = tf.expand_dims(img_array, 0)  # Create a batch
+
+                predictions = self.model.predict(img_array)
+                score = tf.nn.softmax(predictions[0])
+                print(
+                    f"This image most likely belongs to {class_names[np.argmax(score)]} "
+                    f"with a {100 * np.max(score):.2f} percent confidence."
+                )
     
+    def convert_model(self):
+        # convert model 
+        converter = tf.lite.TFLiteConverter.from_kera_model(model)
+        tflite_model = converter.convert()
+            
     def train_model_transfer(self):
         # Define paths
         train_dir = 'dataset/training_set'

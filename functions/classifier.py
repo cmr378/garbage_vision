@@ -53,7 +53,7 @@ class Classifier:
         train_ds = train_ds.cache().prefetch(buffer_size=AUTOTUNE)
         valid_ds = valid_ds.cache().prefetch(buffer_size=AUTOTUNE)
 
-        return train_ds , valid_ds
+        return train_ds , valid_ds , class_names
 
         '''
         Applying to data set (1 image)
