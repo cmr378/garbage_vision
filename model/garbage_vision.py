@@ -1,100 +1,128 @@
-import os
+"""Utilities for training and evaluating simple garbage vision models."""
+
+from __future__ import annotations
+
+import argparse
+from pathlib import Path
+
+import matplotlib.pyplot as plt
+import numpy as np
 import tensorflow as tf
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
 from tensorflow.keras.applications import VGG16
 from tensorflow.keras.models import Model
-from tensorflow.keras.layers import Dense, Flatten
+from tensorflow.keras.layers import Dense, Dropout, Flatten
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.callbacks import EarlyStopping
-import argparse
-import matplotlib.pyplot as plt 
-import numpy as np 
-
 
 class GarbageVision:
-    def __init__(self):
-        self.model = None
+    """High level helper for constructing and evaluating vision models."""
 
-    def create_sequential_model(self, num_classes : int, num_blocks : int, num_layers : int, drop_val : float) -> tf.keras.Sequential: 
-        # create sequential model and rescale 
-        self.model = tf.keras.Sequential()
-        self.model.add(tf.keras.layers.Rescaling(1./255))
-   
-        # add convolutional blocks, dense layers and output layer
+    def __init__(self) -> None:
+        # ``self.model`` will be populated by the builder methods.
+        self.model: tf.keras.Model | None = None
+
+    def create_sequential_model(
+        self,
+        num_classes: int,
+        num_blocks: int,
+        num_layers: int,
+        drop_val: float | None,
+    ) -> tf.keras.Sequential:
+        """Create a simple convolutional network.
+
+        Parameters
+        ----------
+        num_classes:
+            Number of classes to predict.
+        num_blocks:
+            How many convolution/max‑pool blocks to add.
+        num_layers:
+            Number of dense layers after the convolutional part.
+        drop_val:
+            Optional dropout rate applied before the output layer.
+        """
+
+        model = tf.keras.Sequential([tf.keras.layers.Rescaling(1.0 / 255)])
+
         for _ in range(num_blocks):
-            self.model.add(tf.keras.layers.Conv2D(32, 3, activation='relu'))
-            self.model.add(tf.keras.layers.MaxPooling2D())
+            model.add(tf.keras.layers.Conv2D(32, 3, activation="relu"))
+            model.add(tf.keras.layers.MaxPooling2D())
 
-        # flatten the output from the convolutional blocks 
-        self.model.add(tf.keras.layers.Flatten())
-        
+        model.add(tf.keras.layers.Flatten())
+
         for _ in range(num_layers):
-            self.model.add(tf.keras.layers.Dense(128, activation='relu'))
+            model.add(tf.keras.layers.Dense(128, activation="relu"))
 
-        if drop_val is None:
-            self.model.add(tf.keras.layers.Dense(num_classes))
-        else:
-            for _ in range(num_blocks):
-                tf.keras.layers.Dropout(drop_val)
+        if drop_val is not None:
+            model.add(Dropout(drop_val))
 
-            self.model.add(tf.keras.layers.Dense(num_classes))
-            tf.keras.layers.Dropout(drop_val)
+        activation = "softmax" if num_classes > 1 else "sigmoid"
+        model.add(tf.keras.layers.Dense(num_classes, activation=activation))
 
-        return self.model 
+        self.model = model
+        return model
 
-    def evaluate_model(self , epochs : int, history) -> int:
+    def plot_training_history(self, epochs: int, history) -> None:
+        """Visualise accuracy and loss for the given training history."""
 
-        # logs for visualization
-        acc = history.history['accuracy']
-        val_acc = history.history['val_accuracy']
-        loss = history.history['loss']
-        val_loss = history.history['val_loss']
+        acc = history.history["accuracy"]
+        val_acc = history.history["val_accuracy"]
+        loss = history.history["loss"]
+        val_loss = history.history["val_loss"]
 
         epochs_range = range(epochs)
 
         plt.figure(figsize=(8, 8))
         plt.subplot(1, 2, 1)
-        plt.plot(epochs_range, acc, label='Training Accuracy')
-        plt.plot(epochs_range, val_acc, label='Validation Accuracy')
-        plt.legend(loc='lower right')
-        plt.title('Training and Validation Accuracy')
+        plt.plot(epochs_range, acc, label="Training Accuracy")
+        plt.plot(epochs_range, val_acc, label="Validation Accuracy")
+        plt.legend(loc="lower right")
+        plt.title("Training and Validation Accuracy")
 
         plt.subplot(1, 2, 2)
-        plt.plot(epochs_range, loss, label='Training Loss')
-        plt.plot(epochs_range, val_loss, label='Validation Loss')
-        plt.legend(loc='upper right')
-        plt.title('Training and Validation Loss')
+        plt.plot(epochs_range, loss, label="Training Loss")
+        plt.plot(epochs_range, val_loss, label="Validation Loss")
+        plt.legend(loc="upper right")
+        plt.title("Training and Validation Loss")
         plt.show()
 
-        self.model.summary()
+        if self.model is not None:
+            self.model.summary()
 
-    def predict(self, class_names) -> None:
-        predict_data_path : str = r'/Users/carlosromero/Desktop/garbage_vision/prediction_data/'
+    def predict(self, class_names, predict_data_path: str = "prediction_data") -> None:
+        """Run predictions for every image in ``predict_data_path``."""
 
-        for filename in os.listdir(predict_data_path):
-            if filename.endswith(".jpg") or filename.endswith(".png"):
-                file_path = os.path.join(predict_data_path, filename)
-                img = tf.keras.utils.load_img(
-                    file_path, target_size=(180, 180)
-                )
-                
-                img_array = tf.keras.utils.img_to_array(img)
-                img_array = tf.expand_dims(img_array, 0)  # Create a batch
+        path = Path(predict_data_path)
+        for file_path in path.iterdir():
+            if file_path.suffix.lower() not in {".jpg", ".png"}:
+                continue
 
-                predictions = self.model.predict(img_array)
-                score = tf.nn.softmax(predictions[0])
-                print(
-                    f"This image most likely belongs to {class_names[np.argmax(score)]} "
-                    f"with a {100 * np.max(score):.2f} percent confidence."
-                )
-    
-    def convert_model(self):
-        # convert model 
-        converter = tf.lite.TFLiteConverter.from_kera_model(model)
+            img = tf.keras.utils.load_img(file_path, target_size=(180, 180))
+            img_array = tf.expand_dims(tf.keras.utils.img_to_array(img), 0)
+
+            predictions = self.model.predict(img_array)
+            score = tf.nn.softmax(predictions[0])
+            print(
+                f"This image most likely belongs to {class_names[np.argmax(score)]} "
+                f"with a {100 * np.max(score):.2f} percent confidence."
+            )
+
+    def convert_model(self, output_file: str = "model.tflite") -> bytes:
+        """Convert the current model to TensorFlow Lite format."""
+
+        if self.model is None:
+            raise ValueError("No model available to convert.")
+
+        converter = tf.lite.TFLiteConverter.from_keras_model(self.model)
         tflite_model = converter.convert()
+        with open(output_file, "wb") as f:
+            f.write(tflite_model)
+        return tflite_model
             
-    def train_model_transfer(self):
-        # Define paths
+    def train_model_transfer(self) -> None:
+        """Train a binary classifier using a VGG16 base model."""
+
         train_dir = 'dataset/training_set'
         validation_dir = 'dataset/validation_set'
 
@@ -163,7 +191,9 @@ class GarbageVision:
         # Save the model
         self.model.save('model.h5')
 
-    def evaluate_model(self):
+    def evaluate_model(self) -> None:
+        """Evaluate the stored model using the validation set."""
+
         if self.model is None:
             self.model = tf.keras.models.load_model('model.h5')
 
@@ -186,6 +216,16 @@ class GarbageVision:
         print(f'Validation Accuracy: {accuracy:.2f}')
 
 if __name__ == "__main__":
-    processor = ImageProcessor()
-    processor.main()
+    parser = argparse.ArgumentParser(description="Garbage Vision utility")
+    parser.add_argument(
+        "--summary",
+        action="store_true",
+        help="build a dummy model and print its summary",
+    )
+    args = parser.parse_args()
+
+    if args.summary:
+        gv = GarbageVision()
+        gv.create_sequential_model(num_classes=2, num_blocks=1, num_layers=1, drop_val=0.5)
+        gv.model.summary()
  
